@@ -15,7 +15,7 @@ Simulação 3D OpenGL de **dois robôs industriais** — Cartesiano (PPP) e Pola
 | Robô | Tipo | Juntas | FK | IK |
 |---|---|---|---|---|
 | **Cartesiano** | PPP | d₁ (X), d₂ (Y), d₃ (Z) | x=d₁, y=d₂, z=d₃ | d₁=x, d₂=y, d₃=z |
-| **Polar (Esférico)** | RRP | θ (azimute), φ (elevação), ρ (radial) | x=ρcosφcosθ, y=ρcosφsinθ, z=ρsinφ | ρ=√(x²+y²+z²), θ=atan2(y,x), φ=atan2(z, √(x²+y²)) |
+| **Polar (Esférico)** | RRP | θ (azimute), φ (elevação), ρ (radial); elo fixo d₁ | x=ρcosφcosθ, y=ρcosφsinθ, z=d₁+ρsinφ | ρ=√(x²+y²+(z-d₁)²), θ=atan2(y,x), φ=atan2(z-d₁, √(x²+y²)) |
 
 ## Dependências
 
@@ -56,12 +56,37 @@ cmake --build build/default
 
 ## Indicadores visuais
 
+### Polar (RRP)
+
 | Elemento | Significado |
 |---|---|
-| Esfera laranja na origem | Base do robô |
-| Esfera rosa | Efetuador |
-| Cilindro cinza/prata | Junta prismática (cilindro hidráulico) |
-| Cubo laranja | Indicador de junta prismática |
-| Wireframe azul-claro | Workspace (caixa pro Cartesiano, anel pro Polar) |
+| Pedestal cinza-escuro achatado | Base do robô (não rotaciona) |
+| Disco cinza-claro sobre o pedestal | Turntable (rotaciona com θ) |
+| Coluna vertical cinza-prata | Elo fixo d₁ (altura do ombro) |
+| Bloco cinza no topo da coluna | Carcaça do ombro (pivô de φ) |
+| Bainha grossa + haste fina (cinza-prata) | Boom telescópico — junta prismática ρ (bainha = ρ_min) |
+| Esfera vermelha | Efetuador |
+| Arcos vermelhos | Indicadores de θ (no chão) e φ (no plano vertical do boom) |
+| Seta dupla vermelha ao lado do boom | Direção do deslizamento ρ |
+| Arcos azul-acinzentados (interno/externo) | Workspace — ρ_min e ρ_max ao redor do ombro |
+
+### Cartesiano (PPP)
+
+| Elemento | Significado |
+|---|---|
+| Pedestal cinza-escuro achatado | Base do robô na origem |
+| Trilho vermelho dessaturado ao longo de +X | Eixo prismático d₁ entre d₁_min e d₁_max |
+| Trilho verde dessaturado ao longo de +Y | Eixo prismático d₂ entre d₂_min e d₂_max |
+| Trilho azul dessaturado ao longo de +Z | Eixo prismático d₃ entre d₃_min e d₃_max |
+| Cubo laranja | Sled (carro) marcando posição corrente em cada trilho |
+| Esferinhas cinza nas pontas dos trilhos | Tick caps min/max de cada eixo |
+| Bainha grossa + haste fina (cinza-prata) | Cadeia cinemática conectando (0,0,0)→(d₁,0,0)→(d₁,d₂,0)→efetuador |
+| Esfera vermelha | Efetuador em (d₁, d₂, d₃) |
+| Wireframe azul-acinzentado | Workspace (caixa entre d_min e d_max em cada eixo) |
+
+### Comuns
+
+| Elemento | Significado |
+|---|---|
 | Cruz verde no alvo | IK ok |
 | Cruz vermelha no alvo | IK falhou (mensagem detalhada no painel) |

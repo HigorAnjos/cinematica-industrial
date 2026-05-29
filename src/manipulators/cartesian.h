@@ -4,7 +4,9 @@
 
 class ManipulatorCartesian : public IManipulator {
 public:
-    ManipulatorCartesian(float xMax = 2.0f, float yMax = 2.0f, float zMax = 2.0f);
+    ManipulatorCartesian(float d1Min = 0.0f, float d1Max = 2.0f,
+                         float d2Min = 0.0f, float d2Max = 2.0f,
+                         float d3Min = 0.0f, float d3Max = 2.0f);
 
     const char* name() const override { return "Cartesiano (PPP)"; }
     int         numJoints() const override { return 3; }

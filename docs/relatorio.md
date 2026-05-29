@@ -68,10 +68,10 @@ Por convenção, robôs industriais são classificados pela combinação das 3 p
 
 Três juntas prismáticas, cada uma deslizando ao longo de um eixo cartesiano principal. Topologia parecida com uma impressora 3D ou um CNC de 3 eixos.
 
-- **Juntas**: `d₁` (eixo X), `d₂` (eixo Y), `d₃` (eixo Z).
+- **Juntas**: `d₁` (eixo X), `d₂` (eixo Y), `d₃` (eixo Z), cada uma com mínimo e máximo configuráveis.
 - **Variáveis**: as próprias distâncias, em unidades de comprimento.
 - **DOF**: 3 (suficiente para posicionar em XYZ; não controla orientação).
-- **Workspace**: caixa retangular `[0, d₁_max] × [0, d₂_max] × [0, d₃_max]`.
+- **Workspace**: caixa retangular `[d₁_min, d₁_max] × [d₂_min, d₂_max] × [d₃_min, d₃_max]`. Os limites mínimos modelam o **offset mecânico** real do batente do encoder (em hardware nunca é zero exato).
 
 ### 3.2 Cinemática Direta (FK)
 
@@ -98,7 +98,7 @@ $$
 A IK só falha quando o alvo está fora dos ranges de algum eixo:
 
 $$
-\text{válido} \iff 0 \le x \le d_{1\max} \;\land\; 0 \le y \le d_{2\max} \;\land\; 0 \le z \le d_{3\max}
+\text{válido} \iff d_{1\min} \le x \le d_{1\max} \;\land\; d_{2\min} \le y \le d_{2\max} \;\land\; d_{3\min} \le z \le d_{3\max}
 $$
 
 ### 3.4 Exemplos numéricos (d_max = 2.0 em cada eixo)
@@ -137,38 +137,41 @@ A simplicidade da FK/IK Cartesiana é o principal atrativo dessa estrutura no ch
 
 ### 4.1 Modelagem
 
-Duas rotações em série + uma extensão prismática. O efetuador é descrito em **coordenadas esféricas**.
+Duas rotações em série + uma extensão prismática, todas montadas sobre uma **coluna vertical fixa de altura `d₁`**. O efetuador é descrito em **coordenadas esféricas centradas no ombro** (topo da coluna).
 
+- **Elo fixo**:
+  - `d₁`: altura da coluna vertical entre o turntable (na base, plano XY) e o pivô do ombro. Não é variável de junta; é geometria fixa do robô.
 - **Juntas**:
-  - `θ` (theta): **azimute** — rotação em torno do eixo Z (vertical).
-  - `φ` (phi): **elevação** — rotação no plano vertical, medida a partir do plano XY (positivo = pra cima).
-  - `ρ` (rho): **distância radial** — extensão do braço prismático.
+  - `θ` (theta): **azimute** — rotação em torno do eixo Z (vertical), na base.
+  - `φ` (phi): **elevação** — rotação no plano vertical em torno do **ombro**, medida a partir do plano horizontal que passa pelo ombro (positivo = pra cima).
+  - `ρ` (rho): **distância radial** — extensão do braço telescópico, medida **a partir do ombro**.
 - **DOF**: 3 (posicionamento em XYZ).
-- **Workspace**: casca esférica de raio externo `ρ_max` e raio interno `ρ_min`, recortada pelo intervalo de `φ` (tipicamente `−90° ≤ φ ≤ +90°`).
+- **Workspace**: casca esférica de raio externo `ρ_max` e raio interno `ρ_min` centrada em `(0, 0, d₁)`, recortada pelo intervalo de `φ` (tipicamente `−90° ≤ φ ≤ +90°`).
 
 ### 4.2 Cinemática Direta (FK)
 
-Conversão **esférico → cartesiano**:
+A posição do ombro é fixa: `(0, 0, d₁)`. A posição do efetuador é dada pela conversão **esférico → cartesiano** somada ao deslocamento do ombro:
 
 $$
 \begin{aligned}
 x &= \rho \, \cos\varphi \, \cos\theta \\
 y &= \rho \, \cos\varphi \, \sin\theta \\
-z &= \rho \, \sin\varphi
+z &= d_1 + \rho \, \sin\varphi
 \end{aligned}
 $$
 
-Note que `cos(φ)` aparece nos componentes X e Y (a projeção no plano XY), e `sin(φ)` aparece em Z (a elevação direta). Quando `φ = 0`, o braço está horizontal (no plano XY) e `z = 0`. Quando `φ = 90°`, o braço aponta diretamente para cima e `(x, y) = (0, 0)`, `z = ρ`.
+Note que `cos(φ)` aparece nos componentes X e Y (a projeção no plano XY a partir do ombro), e `sin(φ)` aparece na contribuição em Z somada a `d₁`. Quando `φ = 0`, o braço fica horizontal e `z = d₁`. Quando `φ = +90°`, o braço aponta direto pra cima: `(x, y) = (0, 0)`, `z = d₁ + ρ`.
 
 ### 4.3 Cinemática Inversa (IK)
 
-Conversão **cartesiano → esférico**:
+Desloca-se o alvo para o referencial do ombro subtraindo `d₁` em Z, e depois aplica-se a conversão **cartesiano → esférico**:
 
 $$
 \begin{aligned}
-\rho   &= \sqrt{x^2 + y^2 + z^2} \\
+z_r    &= z - d_1 \\
+\rho   &= \sqrt{x^2 + y^2 + z_r^2} \\
 \theta &= \mathrm{atan2}(y, x) \\
-\varphi &= \mathrm{atan2}\!\left(z, \sqrt{x^2 + y^2}\right)
+\varphi &= \mathrm{atan2}\!\left(z_r, \sqrt{x^2 + y^2}\right)
 \end{aligned}
 $$
 
@@ -182,7 +185,7 @@ A IK do robô polar falha quando:
 - `ρ < ρ_min`: alvo perto demais — o braço prismático não retrai o suficiente.
 - `φ` fora do intervalo permitido (normalmente `[−90°, +90°]`): alvo em uma direção mecanicamente inacessível pelas rotações.
 
-### 4.5 Exemplos numéricos (ρ_min = 0.3, ρ_max = 2.5)
+### 4.5 Exemplos numéricos (d₁ = 0.6, ρ_min = 0.4, ρ_max = 2.5)
 
 **Exemplo FK-POL-1**: `θ = 30°`, `φ = 45°`, `ρ = 2.0`.
 
@@ -194,42 +197,46 @@ A IK do robô polar falha quando:
 | `sin(45°)` | 0.707 |
 | `x = 2.0 · 0.707 · 0.866` | **1.224** |
 | `y = 2.0 · 0.707 · 0.500` | **0.707** |
-| `z = 2.0 · 0.707` | **1.414** |
+| `z = d₁ + 2.0 · 0.707 = 0.6 + 1.414` | **2.014** |
 
-Efetuador: `(1.224, 0.707, 1.414)`.
+Efetuador: `(1.224, 0.707, 2.014)`.
 
-**Exemplo IK-POL-1**: alvo `(1.5, 0, 1.0)`.
+**Exemplo IK-POL-1**: alvo `(1.5, 0, 1.6)`.
 
 | Passo | Cálculo | Valor |
 |---|---|---|
+| `z_r` | `z − d₁ = 1.6 − 0.6` | 1.000 |
 | `ρ²` | `1.5² + 0² + 1.0² = 2.25 + 0 + 1.0` | 3.25 |
 | `ρ` | `√3.25` | **1.803** |
 | `θ` | `atan2(0, 1.5)` | **0.00°** |
 | `xy` | `√(1.5² + 0²)` | 1.500 |
 | `φ` | `atan2(1.0, 1.5)` | **33.69°** |
 
-Solução: `θ = 0°`, `φ = 33.69°`, `ρ = 1.803`. Validações: `ρ ∈ [0.3, 2.5]` ✓, `φ ∈ [−90°, +90°]` ✓.
+Solução: `θ = 0°`, `φ = 33.69°`, `ρ = 1.803`. Validações: `ρ ∈ [0.4, 2.5]` ✓, `φ ∈ [−90°, +90°]` ✓.
 
-Conferência: simulação reporta `theta = 0.00°`, `phi = 33.69°`, `rho = 1.803`, e o efetuador em `(+1.500, +0.000, +1.000)` (print 02).
+Conferência: simulação reporta `theta = 0.00°`, `phi = 33.69°`, `rho = 1.803`, e o efetuador em `(+1.500, +0.000, +1.600)` (print 02).
 
-**Exemplo IK-POL-2**: alvo `(0, 0, 2.5)`.
+**Exemplo IK-POL-2**: alvo `(0, 0, 3.1)`.
 
 | Passo | Cálculo | Valor |
 |---|---|---|
+| `z_r` | `3.1 − 0.6` | 2.500 |
 | `ρ` | `√(0 + 0 + 6.25)` | **2.500** |
 | `θ` | `atan2(0, 0)` | **0°** (por convenção do `atan2`) |
 | `xy` | `√(0)` | 0 |
 | `φ` | `atan2(2.5, 0)` | **90°** (zênite) |
 
-Solução: braço apontando exatamente pra cima, totalmente estendido.
+Solução: braço apontando exatamente pra cima a partir do ombro, totalmente estendido — o efetuador alcança `z = d₁ + ρ_max = 3.1`.
 
-**Exemplo IK-POL-3 (falha)**: alvo `(3, 0, 0)`.
+**Exemplo IK-POL-3 (falha)**: alvo `(3, 0, 0.6)`.
 
-- `ρ = 3.0 > ρ_max = 2.5` → falha: "rho acima do maximo (alvo longe demais)".
+- `z_r = 0`, `ρ = 3.0 > ρ_max = 2.5` → falha: "rho acima do maximo (alvo longe demais do ombro)".
 
 ### 4.6 Discussão
 
 O robô polar é o caso clássico que aparece em livros de robótica como exemplo da **conversão esférica ↔ cartesiana**. Sua IK em forma fechada é uma das mais limpas que existem. O preço é a presença de **singularidades**: nos polos (`φ = ±90°`), o azimute `θ` se torna indeterminado (o `atan2(0,0)` retorna 0 por convenção, mas qualquer θ daria o mesmo efetuador). Esse é o problema de "gimbal lock" típico de representações com Euler angles.
+
+A introdução do **elo fixo `d₁`** (coluna vertical) torna o modelo fiel ao layout físico de um robô polar industrial real: a base permanece no chão, o ombro fica em uma altura útil de operação, e o workspace se torna uma casca esférica **elevada** em vez de uma esfera centrada na origem do mundo. Isso também elimina uma colisão visual: sem `d₁`, qualquer alvo abaixo do plano XY exigiria que o braço atravessasse o piso.
 
 ---
 

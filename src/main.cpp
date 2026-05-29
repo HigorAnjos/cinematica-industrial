@@ -7,6 +7,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <iostream>
@@ -91,8 +92,10 @@ int main() {
     Renderer3D renderer;
 
     std::vector<std::unique_ptr<IManipulator>> manipulators;
-    manipulators.emplace_back(std::make_unique<ManipulatorCartesian>(2.0f, 2.0f, 2.0f));
-    manipulators.emplace_back(std::make_unique<ManipulatorPolar>(0.3f, 2.5f));
+    manipulators.emplace_back(std::make_unique<ManipulatorCartesian>(0.0f, 2.0f,
+                                                                      0.0f, 2.0f,
+                                                                      0.0f, 2.0f));
+    manipulators.emplace_back(std::make_unique<ManipulatorPolar>(0.6f, 0.4f, 2.5f));
     int activeIdx = 0;
 
     JointAnimator animator;
@@ -203,28 +206,45 @@ int main() {
         }
 
         ImGui::SeparatorText("Geometria");
+        bool geomChanged = false;
         for (auto& lp : active->linkParams()) {
-            ImGui::SliderFloat(lp.label, lp.value, lp.minValue, lp.maxValue, "%.2f");
+            if (ImGui::SliderFloat(lp.label, lp.value, lp.minValue, lp.maxValue, "%.2f")) {
+                geomChanged = true;
+            }
+        }
+        // Quando a geometria muda (ex: rho_max diminuiu), clampa as juntas dentro
+        // do novo intervalo pra evitar que o boom continue alem do limite.
+        if (geomChanged) {
+            for (int i = 0; i < active->numJoints(); ++i) {
+                joints[i]     = std::clamp(joints[i],     specs[i].minValue, specs[i].maxValue);
+                fkTargets[i]  = std::clamp(fkTargets[i],  specs[i].minValue, specs[i].maxValue);
+            }
         }
 
         ImGui::SeparatorText("Cinematica Direta (FK) - tecle Enter");
-        ImGui::TextDisabled("Inputs animam o robo. \"atual\" mostra o valor corrente.");
+        ImGui::TextDisabled("Inputs animam o robo dentro dos limites [min, max].");
         bool fkChanged = false;
         for (int i = 0; i < active->numJoints(); ++i) {
             if (specs[i].isPrismatic) {
                 if (ImGui::InputFloat(specs[i].label, &fkTargets[i], 0.05f, 0.5f, "%.3f")) {
+                    fkTargets[i] = std::clamp(fkTargets[i], specs[i].minValue, specs[i].maxValue);
                     fkChanged = true;
                 }
                 ImGui::SameLine();
-                ImGui::TextDisabled("(atual: %.3f)", joints[i]);
+                ImGui::TextDisabled("(atual: %.3f, range: [%.2f, %.2f])",
+                                     joints[i], specs[i].minValue, specs[i].maxValue);
             } else {
                 float deg = fkTargets[i] * 180.0f / kPi;
                 if (ImGui::InputFloat(specs[i].label, &deg, 1.0f, 10.0f, "%.2f deg")) {
-                    fkTargets[i] = deg * kPi / 180.0f;
+                    fkTargets[i] = std::clamp(deg * kPi / 180.0f,
+                                              specs[i].minValue, specs[i].maxValue);
                     fkChanged = true;
                 }
                 ImGui::SameLine();
-                ImGui::TextDisabled("(atual: %.2f deg)", joints[i] * 180.0f / kPi);
+                ImGui::TextDisabled("(atual: %.2f deg, range: [%.0f, %.0f] deg)",
+                                     joints[i] * 180.0f / kPi,
+                                     specs[i].minValue * 180.0f / kPi,
+                                     specs[i].maxValue * 180.0f / kPi);
             }
         }
         if (fkChanged) startFKAnimation();

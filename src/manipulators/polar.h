@@ -3,16 +3,18 @@
 #include "../manipulator.h"
 
 // Polar / Spherical (RRP):
-//   theta  - rotation around Z (azimuth)
-//   phi    - elevation from the XY plane (positive = upward)
-//   rho    - radial extension
-// FK:
+//   theta  - rotation around Z (azimuth) at the base
+//   phi    - elevation around the shoulder pivot (positive = upward)
+//   rho    - radial extension of the telescopic boom, measured from the shoulder
+// Fixed link:
+//   d1     - height of the vertical column (shoulder height above the floor)
+// FK (effector position):
 //   x = rho * cos(phi) * cos(theta)
 //   y = rho * cos(phi) * sin(theta)
-//   z = rho * sin(phi)
+//   z = d1 + rho * sin(phi)
 class ManipulatorPolar : public IManipulator {
 public:
-    ManipulatorPolar(float rhoMin = 0.3f, float rhoMax = 2.5f);
+    ManipulatorPolar(float d1 = 0.5f, float rhoMin = 0.3f, float rhoMax = 2.5f);
 
     const char* name() const override { return "Polar (RRP esferico)"; }
     int         numJoints() const override { return 3; }
@@ -34,4 +36,5 @@ public:
 private:
     std::vector<float>     m_joints;
     std::vector<JointSpec> m_specs;
+    float                  m_d1;   // fixed vertical-column height (shoulder elevation)
 };
